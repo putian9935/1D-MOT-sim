@@ -221,14 +221,25 @@ class Simulator:
         """
         return (np.conjugate(self.state).T @ self.p_mat @ self.state)
 
+    def ground_state(self):
+        """Returns ground state probability
+
+        Returns
+        -------
+        The ground state probability
+        """
+        return np.sum((np.conjugate(self.state).T * self.state)[::self.spin_states])
+
 
 np.set_printoptions(linewidth=180)
 result = Simulator(
-    1, -10, 0, nmax=50, epsilon=[(0, 0, 1),(0,0,0)]).simulate(1000, .1, [Simulator.momentum])
+    1, -10, 0, nmax=10, epsilon=[(0, 0, 1), (1, 0, 0)]).simulate(10000, .1, [Simulator.momentum, Simulator.ground_state])
 
 
-print(*np.unique(result[:, 0].real,return_counts=True))
-plt.plot(*np.unique(result[:, 0].real,return_counts=True), "+")
+print(*np.unique(result[:, 0].real, return_counts=True))
+plt.plot(*np.unique(result[:, 0].real, return_counts=True), "+")
 plt.show()
 plt.plot(result[:, 1].real)
+plt.show()
+plt.plot(result[:, 2].real)
 plt.show()
