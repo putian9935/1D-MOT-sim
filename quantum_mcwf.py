@@ -11,7 +11,10 @@ from tqdm import tqdm
 class Simulator:
     """Simulator of 1D MOT with MCWF 
 
-    Convention: (-, 0, +) -> (0, 1, 2)
+    Conventions
+    -----------
+    1. (-, 0, +) -> (0, 1, 2)
+    2. In epsilon(polarization), the first component is propagating to right, and the second to left 
     """
 
     def __init__(self, s,  delta, b, gamma=1.6, epsilon=None, jg=0, je=1, gg=0, ge=1.5, nmax=100):
@@ -23,7 +26,7 @@ class Simulator:
         self.ground_states_offset = 2 * jg + 1  # offset in terms of index
         self.n = self.spin_states * (2*nmax+1)
         self.state = np.zeros(self.n, dtype=np.complex128)
-        self.state[0] = 1
+        self.state[3] = 1j
 
         # first index: k; second index: q
         self.bar_p = np.array(
@@ -50,7 +53,7 @@ class Simulator:
         self.hamiltonian = self.calc_hamiltonian()
 
         self.c_matrices = self.c_matrix()
-
+        
         self.p_mat = np.kron(
             np.diag(list(range(-self.max_momentum, self.max_momentum+1))),
             np.eye(self.spin_states)
@@ -77,7 +80,7 @@ class Simulator:
                     for n, _ in enumerate(range(-self.max_momentum, self.max_momentum+1)):
                         if not n:
                             continue
-                        if not ipz:
+                        if not ipz:  # propagating to the right
                             light[n*self.spin_states+ie+self.ground_states_offset,
                                   (n-1)*self.spin_states+ig] = pz[iq] * cg(self.jg, mg, 1, q, self.je, me)
                         else:
@@ -110,7 +113,7 @@ class Simulator:
 
         Note
         ----
-        The *k* indices goes first, meaning the first three entries correspond to k=-1
+        The *k* indices goes first, meaning the first three entries correspond to q=-1
         """
         ret = np.array(self.p_bar)
         for iq, q in enumerate((-1, 0, 1)):
@@ -162,6 +165,11 @@ class Simulator:
             else:
                 self.state = self.c_matrices[jump] @ self.state
 
+                # k = (-1,0,1)[jump % 3]
+                # q = (-1, 0, 1)[jump // 3]
+                # print(k, q)
+                # input()
+
             self.state /= np.sum(np.abs(self.state)**2)**.5
 
             new_entry = [jump]
@@ -187,11 +195,12 @@ class Simulator:
         for iq, q in enumerate((-1, 0, 1)):
             es_dagger = np.zeros(
                 (self.spin_states, self.spin_states), dtype=np.complex128)
-            es_dagger[:(2*self.jg+1), (2*self.jg+1):] = np.conjugate(np.transpose(self.es_matrix(q)))
+            es_dagger[:(2*self.jg+1), (2*self.jg+1)
+                        :] = np.conjugate(np.transpose(self.es_matrix(q)))
             for ik, k in enumerate((-1, 0, 1)):
                 ret.append(
                     self.p_bar[ik, iq] ** .5 * np.kron(
-                        np.diag([1]*(2*self.max_momentum + 1 - abs(k)), k),
+                        np.diag([1]*(2*self.max_momentum + 1 - abs(k)), -k),
                         es_dagger
                     )
                 )
@@ -233,12 +242,10 @@ class Simulator:
 
 np.set_printoptions(linewidth=180)
 result = Simulator(
-    1, -10, 0, nmax=10, epsilon=[(0, 0, 1), (1, 0, 0)]).simulate(10000, .1, [Simulator.momentum, Simulator.ground_state])
+    1, 12, 0, nmax=40, epsilon=[(1, 0, 0), (0, 0, 1)]).simulate(10000, 5e-4, [Simulator.momentum, Simulator.ground_state])
 
 
 print(*np.unique(result[:, 0].real, return_counts=True))
-plt.plot(*np.unique(result[:, 0].real, return_counts=True), "+")
-plt.show()
 plt.plot(result[:, 1].real)
 plt.show()
 plt.plot(result[:, 2].real)
