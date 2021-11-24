@@ -224,7 +224,7 @@ class Simulator:
 
 np.set_printoptions(linewidth=180)
 result = Simulator(
-    1, -10, 0, nmax=50, epsilon=[(0, 0, 1)]*2).simulate(1000, .1, [Simulator.momentum])
+    1, -10, 0, nmax=50, epsilon=[(0, 0, 1),(0,0,0)]).simulate(1000, .1, [Simulator.momentum])
 
 
 print(*np.unique(result[:, 0].real,return_counts=True))
