@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 __doc__ = """The MCWF program for simulating 1D MOT. 
 """
 
@@ -240,13 +239,3 @@ class Simulator:
         return np.sum((np.conjugate(self.state).T * self.state)[::self.spin_states])
 
 
-np.set_printoptions(linewidth=180)
-result = Simulator(
-    1, 12, 0.048, nmax=20, epsilon=[(1, 0, 0), (0, 0, 1)]).simulate(1000, 1e-3, [Simulator.momentum, Simulator.ground_state])
-
-
-print(*np.unique(result[:, 0].real, return_counts=True))
-plt.plot(result[:, 1].real)
-plt.show()
-plt.plot(result[:, 2].real)
-plt.show()

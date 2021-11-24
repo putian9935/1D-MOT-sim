@@ -1,10 +1,7 @@
-import matplotlib.pyplot as plt
+
 __doc__ = "Repeat what is done in sec 5.1"
 
-import enum
 import numpy as np
-from numpy.lib import unique
-from cg_coefficient import cg
 from tqdm import tqdm
 
 
@@ -15,7 +12,9 @@ class tSimulator:
                               dtype=np.complex128)  # excited state
         self.beta = np.zeros(2 * self.max_momentum + 1,
                              dtype=np.complex128)  # ground state
-        self.beta[-self.max_momentum//2] = 1
+        # self.beta[-self.max_momentum//2] = .5 ** .5
+        # self.alpha[-self.max_momentum//2] = -.5**.5
+        self.alpha[-self.max_momentum//2] = 1
         self.s = s
         self.delta = delta
         self.gamma = gamma
@@ -51,8 +50,8 @@ class tSimulator:
                 new_beta = np.array(self.beta, dtype=np.complex128)
                 for ip, p in enumerate(range(-self.max_momentum, self.max_momentum+1)):
                     new_alpha[ip] += time_step * \
-                        (-1j * p*p+self.gamma *
-                         (1j*self.delta-.5))*self.alpha[ip]
+                        (-1j * p*p+1j*self.delta+self.gamma *
+                         (-.5))*self.alpha[ip]
                     new_beta[ip] += time_step * -1j * p*p * self.beta[ip]
                     if p + 1 <= self.max_momentum:
                         new_alpha[ip] += -.5j * time_step * \
@@ -84,15 +83,15 @@ class tSimulator:
                 np.sum(np.abs(self.beta)**2)
             self.alpha /= tot_mod ** .5
             self.beta /= tot_mod ** .5
-            
-            print(np.sum(np.abs(self.alpha)**2) + \
-                np.sum(np.abs(self.beta)**2))
-            input()
+
             new_entry = [jump]
             for func in stat_funcs:
                 new_entry.append(func(self))
 
             ret.append(new_entry)
+
+        print(self.alpha)
+        print(self.beta)
         return np.array(ret)
 
     def momentum(self):
@@ -102,12 +101,3 @@ class tSimulator:
     def ground_state_prob(self):
         return (np.conjugate(self.beta).T  @ self.beta)
 
-
-result = tSimulator(
-    1, -.1, nmax=8,).simulate(10000, .001, [tSimulator.momentum, tSimulator.ground_state_prob])
-print(*np.unique(result[:, 0].real, return_counts=True))
-fig, ax = plt.subplots()
-ax.plot(result[:, 1].real)
-ax2 = ax.twinx()
-ax2.plot(result[:, 2].real, c='C1')
-plt.show()
