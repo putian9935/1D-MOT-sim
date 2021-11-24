@@ -14,7 +14,7 @@ class Simulator:
     Convention: (-, 0, +) -> (0, 1, 2)
     """
 
-    def __init__(self, s,  delta, b, gamma=1.6, epsilon=(1, 0, 0), jg=0, je=1, gg=0, ge=1.5, nmax=100):
+    def __init__(self, s,  delta, b, gamma=1.6, epsilon=None, jg=0, je=1, gg=0, ge=1.5, nmax=100):
         self.jg = jg
         self.je = je
         self.gg = gg
@@ -22,7 +22,7 @@ class Simulator:
         self.spin_states = 2 * (jg + je + 1)
         self.ground_states_offset = 2 * jg + 1  # offset in terms of index
         self.n = self.spin_states * (2*nmax+1)
-        self.state = np.zeros(self.n, dtype=np.complex128)  # / self.n ** .5
+        self.state = np.zeros(self.n, dtype=np.complex128)
         self.state[0] = 1
         # first index: k; second index: q
         self.bar_p = np.array(
@@ -34,7 +34,10 @@ class Simulator:
         self.b = b
 
         self.max_momentum = nmax
-        self.polarization = epsilon
+        if isinstance(epsilon, type(None)):
+            self.polarizations = [(1, 0, 0), (0, 0, 1)]
+        else:
+            self.polarizations = epsilon
 
         # matrix p, row is k; column is q
         self.p_bar = self.gamma * np.array([
@@ -61,36 +64,25 @@ class Simulator:
             np.arange(-self.max_momentum, self.max_momentum+1)**2), np.eye(self.spin_states))
 
         light = np.zeros((self.n, self.n), dtype=np.complex128)
-        for iq, q in enumerate((-1, 0, 1)):
-            if not self.polarization[iq]:
-                continue
-            for ie, me in enumerate(range(-self.je, self.je+1)):
-                mg = me - q
-                if not -self.jg <= mg <= self.jg:
-                    continue  # constraint of CG coeff
-                ig = mg + self.jg
-                for n, _ in enumerate(range(-self.max_momentum, self.max_momentum+1)):
-                    if not n:
-                        continue
-                    light[n*self.spin_states+ie+self.ground_states_offset, (n-1)*self.spin_states+ig] = self.polarization[iq] * \
-                        cg(self.jg, mg, 1, q, self.je, me)
+        for ipz, pz in enumerate(self.polarizations):
+            for iq, q in enumerate((-1, 0, 1)):
+                if not pz[iq]:
+                    continue
+                for ie, me in enumerate(range(-self.je, self.je+1)):
+                    mg = me - q
+                    if not -self.jg <= mg <= self.jg:
+                        continue  # constraint of CG coeff
+                    ig = mg + self.jg
+                    for n, _ in enumerate(range(-self.max_momentum, self.max_momentum+1)):
+                        if not n:
+                            continue
+                        if not ipz:
+                            light[n*self.spin_states+ie+self.ground_states_offset,
+                              (n-1)*self.spin_states+ig] = pz[iq] * cg(self.jg, mg, 1, q, self.je, me)
+                        else:
+                            light[(n-1)*self.spin_states+ie+self.ground_states_offset,
+                              n*self.spin_states+ig] = pz[iq] * cg(self.jg, mg, 1, q, self.je, me)
         light += np.conjugate(np.transpose(light))
-
-        clight = np.zeros((self.n, self.n), dtype=np.complex128)
-        for iq, q in enumerate((-1, 0, 1)):
-            if not self.polarization[iq]:
-                continue
-            for ie, me in enumerate(range(-self.je, self.je+1)):
-                mg = me - q
-                if not -self.jg <= mg <= self.jg:
-                    continue  # constraint of CG coeff
-                ig = mg + self.jg
-                for n, _ in enumerate(range(-self.max_momentum, self.max_momentum+1)):
-                    if not n:
-                        continue
-                    clight[(n-1)*self.spin_states+ie+self.ground_states_offset, n*self.spin_states+ig] = self.polarization[iq] * \
-                        cg(self.jg, mg, 1, q, self.je, me)
-        clight += np.conjugate(np.transpose(clight))
 
         excited_state_projector = np.kron(
             np.eye(2*self.max_momentum+1),
@@ -105,7 +97,7 @@ class Simulator:
         )
         ret = (momentum +  # free-evolution
                # atom-field interaction
-               self.gamma * self.s**.5 / 2. * (light + clight) +
+               self.gamma * self.s**.5 / 2. * light +
                # detuning & Lindblad
                -self.gamma*(.5j+self.delta) * excited_state_projector +
                .5j*self.b * mag_field)  # magnetic field gradient
@@ -163,8 +155,8 @@ class Simulator:
         ret = []
         for _ in tqdm(range(tot_steps)):
             jump = self.jump(time_step)
-            if jump == 9:  # no jumps
-                self.state += time_step * self.hamiltonian @ self.state
+            if jump == 9:  # no jump
+                self.state += -1j*time_step * self.hamiltonian @ self.state
             else:
                 self.state = self.c_matrices[jump] @ self.state
             self.state /= np.sum(np.abs(self.state))
@@ -190,8 +182,7 @@ class Simulator:
         for iq, q in enumerate((-1, 0, 1)):
             es_dagger = np.zeros(
                 (self.spin_states, self.spin_states), dtype=np.complex128)
-            es_dagger[:(2*self.jg+1), (2*self.jg+1)
-                        :] = np.conjugate(np.transpose(self.es_matrix(q)))
+            es_dagger[:(2*self.jg+1), (2*self.jg+1)                      :] = np.conjugate(np.transpose(self.es_matrix(q)))
             for ik, k in enumerate((-1, 0, 1)):
                 ret.append(
                     self.p_bar[ik, iq] ** .5 * np.kron(
@@ -227,7 +218,7 @@ class Simulator:
 
 np.set_printoptions(linewidth=180)
 result = Simulator(
-    1, -12, 0, nmax=40).simulate(10000, .002, [Simulator.momentum])
+    1, -12, 0., nmax=40).simulate(10000, .02, [Simulator.momentum])
 
 plt.plot(result[:, 0])
 plt.show()
