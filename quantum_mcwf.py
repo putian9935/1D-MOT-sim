@@ -227,7 +227,7 @@ class Simulator:
 
 np.set_printoptions(linewidth=180)
 result = Simulator(
-    1, -12, -.048, nmax=40).simulate(10000, .002, [Simulator.momentum])
+    1, -12, 0, nmax=40).simulate(10000, .002, [Simulator.momentum])
 
 plt.plot(result[:, 0])
 plt.show()
