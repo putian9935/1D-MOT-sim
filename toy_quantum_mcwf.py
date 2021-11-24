@@ -46,18 +46,18 @@ class tSimulator:
                 new_beta = np.array(self.beta, dtype=np.complex128)
                 for ip, p in enumerate(range(-self.max_momentum, self.max_momentum+1)):
                     new_alpha[ip] += time_step * \
-                        (-1j * p*p+1j*self.gamma *
-                         (self.delta-.5))*self.alpha[ip]
+                        (-1j * p*p+self.gamma *
+                         (1j*self.delta-.5))*self.alpha[ip]
                     new_beta[ip] += time_step * -1j * p*p * self.beta[ip]
                     if p + 1 <= self.max_momentum:
-                        new_alpha[ip] += -time_step * \
+                        new_alpha[ip] += -1j * time_step * \
                             self.s ** .5 * .5 * self.beta[ip+1]
-                        new_beta[ip] += -time_step * \
+                        new_beta[ip] += -1j * time_step * \
                             self.s ** .5 * .5 * self.alpha[ip+1]
                     if p - 1 >= -self.max_momentum:
-                        new_alpha[ip] += -time_step * \
+                        new_alpha[ip] += -1j * time_step * \
                             self.s ** .5 * .5 * self.beta[ip-1]
-                        new_beta[ip] += -time_step * \
+                        new_beta[ip] += -1j * time_step * \
                             self.s ** .5 * .5 * self.alpha[ip-1]
 
                 self.alpha = np.array(new_alpha, dtype=np.complex128)
@@ -94,6 +94,6 @@ class tSimulator:
 import matplotlib.pyplot as plt 
 
 result = tSimulator(
-    10, 20, nmax=3,).simulate(10000, .01, [tSimulator.momentum, tSimulator.ground_state_prob])
+    10, 2, nmax=10,).simulate(10000, .004, [tSimulator.momentum, tSimulator.ground_state_prob])
 plt.plot(result[:,1].real)
 plt.show()

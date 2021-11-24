@@ -53,7 +53,7 @@ class Simulator:
         self.hamiltonian = self.calc_hamiltonian()
 
         self.c_matrices = self.c_matrix()
-        
+
         self.p_mat = np.kron(
             np.diag(list(range(-self.max_momentum, self.max_momentum+1))),
             np.eye(self.spin_states)
@@ -242,7 +242,7 @@ class Simulator:
 
 np.set_printoptions(linewidth=180)
 result = Simulator(
-    1, 12, 0, nmax=40, epsilon=[(1, 0, 0), (0, 0, 1)]).simulate(10000, 5e-4, [Simulator.momentum, Simulator.ground_state])
+    1, 12, 0.048, nmax=20, epsilon=[(1, 0, 0), (0, 0, 1)]).simulate(1000, 1e-3, [Simulator.momentum, Simulator.ground_state])
 
 
 print(*np.unique(result[:, 0].real, return_counts=True))
