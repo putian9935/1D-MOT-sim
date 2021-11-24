@@ -24,6 +24,7 @@ class Simulator:
         self.n = self.spin_states * (2*nmax+1)
         self.state = np.zeros(self.n, dtype=np.complex128)
         self.state[0] = 1
+
         # first index: k; second index: q
         self.bar_p = np.array(
             [[1/5, 1/10, 1/5], [3/5, 4/5, 3/5], [1/5, 1/10, 1/5]]) ** .5
@@ -78,10 +79,10 @@ class Simulator:
                             continue
                         if not ipz:
                             light[n*self.spin_states+ie+self.ground_states_offset,
-                              (n-1)*self.spin_states+ig] = pz[iq] * cg(self.jg, mg, 1, q, self.je, me)
+                                  (n-1)*self.spin_states+ig] = pz[iq] * cg(self.jg, mg, 1, q, self.je, me)
                         else:
                             light[(n-1)*self.spin_states+ie+self.ground_states_offset,
-                              n*self.spin_states+ig] = pz[iq] * cg(self.jg, mg, 1, q, self.je, me)
+                                  n*self.spin_states+ig] = pz[iq] * cg(self.jg, mg, 1, q, self.je, me)
         light += np.conjugate(np.transpose(light))
 
         excited_state_projector = np.kron(
@@ -114,7 +115,8 @@ class Simulator:
         ret = np.array(self.p_bar)
         for iq, q in enumerate((-1, 0, 1)):
             ret[:, iq] *= self.calc_probability_angular(q)
-        return ret.T.flatten()  # this transposed array is flattened
+
+        return ret.T.flatten()
 
     def calc_probability_angular(self, q):
         """Returns the sum part of probability"""
@@ -159,12 +161,15 @@ class Simulator:
                 self.state += -1j*time_step * self.hamiltonian @ self.state
             else:
                 self.state = self.c_matrices[jump] @ self.state
-            self.state /= np.sum(np.abs(self.state))
+
+            self.state /= np.sum(np.abs(self.state)**2)**.5
+
             new_entry = [jump]
             for func in stat_funcs:
                 new_entry.append(func(self))
 
             ret.append(new_entry)
+
         return np.array(ret, dtype=np.complex128)
 
     def c_matrix(self):
@@ -182,14 +187,15 @@ class Simulator:
         for iq, q in enumerate((-1, 0, 1)):
             es_dagger = np.zeros(
                 (self.spin_states, self.spin_states), dtype=np.complex128)
-            es_dagger[:(2*self.jg+1), (2*self.jg+1)                      :] = np.conjugate(np.transpose(self.es_matrix(q)))
+            es_dagger[:(2*self.jg+1), (2*self.jg+1):] = np.conjugate(np.transpose(self.es_matrix(q)))
             for ik, k in enumerate((-1, 0, 1)):
                 ret.append(
                     self.p_bar[ik, iq] ** .5 * np.kron(
-                        np.diag([1]*(2*self.max_momentum + 1 - abs(k)), -k),
+                        np.diag([1]*(2*self.max_momentum + 1 - abs(k)), k),
                         es_dagger
                     )
                 )
+
         return ret
 
     def es_matrix(self, q):
@@ -218,9 +224,11 @@ class Simulator:
 
 np.set_printoptions(linewidth=180)
 result = Simulator(
-    1, -12, 0., nmax=40).simulate(10000, .02, [Simulator.momentum])
+    1, -10, 0, nmax=50, epsilon=[(0, 0, 1)]*2).simulate(1000, .1, [Simulator.momentum])
 
-plt.plot(result[:, 0])
+
+print(*np.unique(result[:, 0].real,return_counts=True))
+plt.plot(*np.unique(result[:, 0].real,return_counts=True), "+")
 plt.show()
 plt.plot(result[:, 1].real)
 plt.show()
