@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 __doc__ = """The MCWF program for simulating 1D MOT. 
 """
 
@@ -21,7 +22,7 @@ class Simulator:
         self.spin_states = 2 * (jg + je + 1)
         self.ground_states_offset = 2 * jg + 1  # offset in terms of index
         self.n = self.spin_states * (2*nmax+1)
-        self.state = np.zeros(self.n, dtype=np.complex128)#  / self.n ** .5
+        self.state = np.zeros(self.n, dtype=np.complex128)  # / self.n ** .5
         self.state[0] = 1
         # first index: k; second index: q
         self.bar_p = np.array(
@@ -43,10 +44,9 @@ class Simulator:
         ])
 
         self.hamiltonian = self.calc_hamiltonian()
-        self.state = np.ones(self.n, dtype=np.complex128)
 
         self.c_matrices = self.c_matrix()
-        
+
         self.p_mat = np.kron(
             np.diag(list(range(-self.max_momentum, self.max_momentum+1))),
             np.eye(self.spin_states)
@@ -76,6 +76,22 @@ class Simulator:
                         cg(self.jg, mg, 1, q, self.je, me)
         light += np.conjugate(np.transpose(light))
 
+        clight = np.zeros((self.n, self.n), dtype=np.complex128)
+        for iq, q in enumerate((-1, 0, 1)):
+            if not self.polarization[iq]:
+                continue
+            for ie, me in enumerate(range(-self.je, self.je+1)):
+                mg = me - q
+                if not -self.jg <= mg <= self.jg:
+                    continue  # constraint of CG coeff
+                ig = mg + self.jg
+                for n, _ in enumerate(range(-self.max_momentum, self.max_momentum+1)):
+                    if not n:
+                        continue
+                    clight[(n-1)*self.spin_states+ie+self.ground_states_offset, n*self.spin_states+ig] = self.polarization[iq] * \
+                        cg(self.jg, mg, 1, q, self.je, me)
+        clight += np.conjugate(np.transpose(clight))
+
         excited_state_projector = np.kron(
             np.eye(2*self.max_momentum+1),
             np.diag([0]*(2*self.jg+1)+[1]*(2*self.je+1))
@@ -88,9 +104,10 @@ class Simulator:
                     [self.ge * me for me in range(-self.je, self.je+1)])
         )
         ret = (momentum +  # free-evolution
-               self.gamma * self.s**.5 / 2. * light -  # atom-field interaction
+               # atom-field interaction
+               self.gamma * self.s**.5 / 2. * (light + clight) +
                # detuning & Lindblad
-               self.gamma*(.5j+self.delta) * excited_state_projector +
+               -self.gamma*(.5j+self.delta) * excited_state_projector +
                .5j*self.b * mag_field)  # magnetic field gradient
 
         return ret
@@ -149,14 +166,14 @@ class Simulator:
             if jump == 9:  # no jumps
                 self.state += time_step * self.hamiltonian @ self.state
             else:
-                self.state = self.c_matrices[jump] @ self.state 
-            self.state /= np.sum(np.abs(self.state)**2)
-            new_entry = []
+                self.state = self.c_matrices[jump] @ self.state
+            self.state /= np.sum(np.abs(self.state))
+            new_entry = [jump]
             for func in stat_funcs:
                 new_entry.append(func(self))
+
             ret.append(new_entry)
-        return ret 
-    
+        return np.array(ret, dtype=np.complex128)
 
     def c_matrix(self):
         """The c matrix divided by time step. The constant gamma is omitted
@@ -169,10 +186,12 @@ class Simulator:
         ----
         This function is called just once 
         """
-        ret  = []
+        ret = []
         for iq, q in enumerate((-1, 0, 1)):
-            es_dagger = np.zeros((self.spin_states, self.spin_states), dtype=np.complex128)
-            es_dagger[:(2*self.jg+1),(2*self.jg+1):] = np.conjugate(np.transpose(self.es_matrix(q)))
+            es_dagger = np.zeros(
+                (self.spin_states, self.spin_states), dtype=np.complex128)
+            es_dagger[:(2*self.jg+1), (2*self.jg+1)
+                        :] = np.conjugate(np.transpose(self.es_matrix(q)))
             for ik, k in enumerate((-1, 0, 1)):
                 ret.append(
                     self.p_bar[ik, iq] ** .5 * np.kron(
@@ -205,9 +224,12 @@ class Simulator:
         """
         return (np.conjugate(self.state).T @ self.p_mat @ self.state)
 
-np.set_printoptions(linewidth=180)
-result = Simulator(1, -12, -.048, nmax=60).simulate(1000, .01, [Simulator.momentum])
 
-import matplotlib.pyplot as plt 
-plt.plot([_[0].real for _ in result])
+np.set_printoptions(linewidth=180)
+result = Simulator(
+    1, -12, -.048, nmax=40).simulate(10000, .002, [Simulator.momentum])
+
+plt.plot(result[:, 0])
+plt.show()
+plt.plot(result[:, 1].real)
 plt.show()
