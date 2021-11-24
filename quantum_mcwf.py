@@ -6,6 +6,7 @@ import numpy as np
 from cg_coefficient import cg
 from tqdm import tqdm
 
+
 class Simulator:
     """Simulator of 1D MOT with MCWF 
 
@@ -20,8 +21,8 @@ class Simulator:
         self.spin_states = 2 * (jg + je + 1)
         self.ground_states_offset = 2 * jg + 1  # offset in terms of index
         self.n = self.spin_states * (2*nmax+1)
-        self.state = np.zeros(self.n, dtype=np.complex128) / self.n ** .5
-
+        self.state = np.zeros(self.n, dtype=np.complex128)#  / self.n ** .5
+        self.state[0] = 1
         # first index: k; second index: q
         self.bar_p = np.array(
             [[1/5, 1/10, 1/5], [3/5, 4/5, 3/5], [1/5, 1/10, 1/5]]) ** .5
@@ -45,7 +46,11 @@ class Simulator:
         self.state = np.ones(self.n, dtype=np.complex128)
 
         self.c_matrices = self.c_matrix()
-        print(self.calc_probability().flatten())
+        
+        self.p_mat = np.kron(
+            np.diag(list(range(-self.max_momentum, self.max_momentum+1))),
+            np.eye(self.spin_states)
+        )
 
     def calc_hamiltonian(self):
         """Returns hamiltonian
@@ -133,7 +138,12 @@ class Simulator:
 
     def simulate(self, tot_steps, time_step, stat_funcs=None):
         """The MCWF simulator. 
+
+        Returns 
+        -------
+        statistics after each time step 
         """
+        ret = []
         for _ in tqdm(range(tot_steps)):
             jump = self.jump(time_step)
             if jump == 9:  # no jumps
@@ -141,6 +151,11 @@ class Simulator:
             else:
                 self.state = self.c_matrices[jump] @ self.state 
             self.state /= np.sum(np.abs(self.state)**2)
+            new_entry = []
+            for func in stat_funcs:
+                new_entry.append(func(self))
+            ret.append(new_entry)
+        return ret 
     
 
     def c_matrix(self):
@@ -156,7 +171,7 @@ class Simulator:
         """
         ret  = []
         for iq, q in enumerate((-1, 0, 1)):
-            es_dagger = np.zeros((self.spin_states, self.spin_states))
+            es_dagger = np.zeros((self.spin_states, self.spin_states), dtype=np.complex128)
             es_dagger[:(2*self.jg+1),(2*self.jg+1):] = np.conjugate(np.transpose(self.es_matrix(q)))
             for ik, k in enumerate((-1, 0, 1)):
                 ret.append(
@@ -181,6 +196,18 @@ class Simulator:
                 ret[i, mg+self.jg] = cg(1, q, self.jg, mg, self.je, me)
         return ret
 
+    def momentum(self):
+        """Returns average momentum 
+
+        Returns
+        -------
+        The average momentum 
+        """
+        return (np.conjugate(self.state).T @ self.p_mat @ self.state)
 
 np.set_printoptions(linewidth=180)
-Simulator(1, 1, 2, nmax=10).simulate(100, .01)
+result = Simulator(1, -12, -.048, nmax=60).simulate(1000, .01, [Simulator.momentum])
+
+import matplotlib.pyplot as plt 
+plt.plot([_[0].real for _ in result])
+plt.show()
