@@ -1,0 +1,6 @@
+*.pdf
+*.csv
+*.png
+ref/
+__pycache__/
+test.py
