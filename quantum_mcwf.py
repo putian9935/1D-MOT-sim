@@ -25,7 +25,6 @@ class Simulator:
         self.ground_states_offset = 2 * jg + 1  # offset in terms of index
         self.n = self.spin_states * (2*nmax+1)
         self.state = np.zeros(self.n, dtype=np.complex128)
-        self.state[3] = 1j
 
         # first index: k; second index: q
         self.bar_p = np.array(
@@ -55,6 +54,10 @@ class Simulator:
 
         self.p_mat = np.kron(
             np.diag(list(range(-self.max_momentum, self.max_momentum+1))),
+            np.eye(self.spin_states)
+        )
+        self.p2_mat = np.kron(
+            np.diag(list(range(-self.max_momentum, self.max_momentum+1)))**2.,
             np.eye(self.spin_states)
         )
 
@@ -149,13 +152,15 @@ class Simulator:
         distribution.cumsum(out=distribution)
         return np.searchsorted(distribution, np.random.random()) - 1
 
-    def simulate(self, tot_steps, time_step, stat_funcs=None):
+    def simulate(self, tot_steps, time_step, stat_funcs=None, every_n_save=100):
         """The MCWF simulator. 
 
         Returns 
         -------
         statistics after each time step 
         """
+        
+        self.state[-(self.max_momentum//2) * self.spin_states] = 1
         ret = []
         for _ in tqdm(range(tot_steps)):
             jump = self.jump(time_step)
@@ -164,16 +169,12 @@ class Simulator:
             else:
                 self.state = self.c_matrices[jump] @ self.state
 
-                # k = (-1,0,1)[jump % 3]
-                # q = (-1, 0, 1)[jump // 3]
-                # print(k, q)
-                # input()
-
             self.state /= np.sum(np.abs(self.state)**2)**.5
 
-            new_entry = [jump]
-            for func in stat_funcs:
-                new_entry.append(func(self))
+            if not _ % every_n_save:
+                new_entry = [jump]
+                for func in stat_funcs:
+                    new_entry.append(func(self))
 
             ret.append(new_entry)
 
@@ -228,6 +229,15 @@ class Simulator:
         The average momentum 
         """
         return (np.conjugate(self.state).T @ self.p_mat @ self.state)
+
+    def momentum2(self):
+        """Returns average squared momentum 
+
+        Returns
+        -------
+        The average squared momentum 
+        """
+        return (np.conjugate(self.state).T @ self.p2_mat @ self.state)
 
     def ground_state(self):
         """Returns ground state probability
