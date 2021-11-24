@@ -84,7 +84,10 @@ class tSimulator:
                 np.sum(np.abs(self.beta)**2)
             self.alpha /= tot_mod ** .5
             self.beta /= tot_mod ** .5
-
+            
+            print(np.sum(np.abs(self.alpha)**2) + \
+                np.sum(np.abs(self.beta)**2))
+            input()
             new_entry = [jump]
             for func in stat_funcs:
                 new_entry.append(func(self))
