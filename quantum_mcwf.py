@@ -176,7 +176,7 @@ class Simulator:
                 for func in stat_funcs:
                     new_entry.append(func(self))
 
-            ret.append(new_entry)
+                ret.append(new_entry)
 
         return np.array(ret, dtype=np.complex128)
 
