@@ -8,7 +8,7 @@ from tqdm import tqdm
 import numba as nb
 
 
-@nb.vectorize([nb.float64(nb.complex128), nb.float32(nb.complex64)])
+@nb.vectorize([nb.float64(nb.complex128)])
 def abs2(x):
     return x.real**2 + x.imag**2
 
@@ -31,10 +31,6 @@ class Simulator:
         self.ground_states_offset = 2 * jg + 1  # offset in terms of index
         self.n = self.spin_states * (2*nmax+1)
         self.state = np.zeros(self.n, dtype=np.complex128)
-
-        # first index: k; second index: q
-        self.bar_p = np.array(
-            [[1/5, 1/10, 1/5], [3/5, 4/5, 3/5], [1/5, 1/10, 1/5]]) ** .5
 
         self.s = s
         self.delta = delta
@@ -142,7 +138,7 @@ class Simulator:
             if not -self.jg <= mg <= self.jg:
                 continue
 
-            ret += cg_modulus2(1, q, self.jg, mg, self.je, me) * np.sum(
+            ret += cg_modulus2(1, q, self.jg, mg, self.je, me) * sum(
                 abs2(self.state[self.ground_states_offset + ie::self.spin_states]))
 
         return ret
@@ -183,7 +179,8 @@ class Simulator:
             else:
                 self.state = self.c_matrices[jump] @ self.state
 
-            self.state /= np.sum(abs2(self.state))**.5
+            # use np.sum if larger dimension
+            self.state /= sum(abs2(self.state))**.5  
 
             if not _ % every_n_save:
                 new_entry = [jump]
