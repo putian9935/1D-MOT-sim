@@ -3,9 +3,14 @@ __doc__ = """The MCWF program for simulating 1D MOT.
 
 
 import numpy as np
-from cg_coefficient import cg
+from cg_coefficient import cg, cg_modulus2
 from tqdm import tqdm
 import numba as nb
+
+
+@nb.vectorize([nb.float64(nb.complex128), nb.float32(nb.complex64)])
+def abs2(x):
+    return x.real**2 + x.imag**2
 
 
 class Simulator:
@@ -48,6 +53,12 @@ class Simulator:
             [3/5, 4/5, 3/5],
             [1/5, 1/10, 1/5]
         ])
+
+        self.p_bar_t_flattened = self.gamma * np.array([
+            [1/5, 1/10, 1/5],
+            [3/5, 4/5, 3/5],
+            [1/5, 1/10, 1/5]
+        ]).T.flatten()
 
         self.hamiltonian = self.calc_hamiltonian()
 
@@ -118,11 +129,10 @@ class Simulator:
         ----
         The *k* indices goes first, meaning the first three entries correspond to q=-1
         """
-        ret = np.array(self.p_bar)
-        for iq, q in enumerate((-1, 0, 1)):
-            ret[:, iq] *= self.calc_probability_angular(q)
 
-        return ret.T.flatten()
+        return self.p_bar_t_flattened[:3] * self.calc_probability_angular(-1) + \
+            self.p_bar_t_flattened[3:6] * self.calc_probability_angular(0) + \
+            self.p_bar_t_flattened[6:] * self.calc_probability_angular(1)
 
     def calc_probability_angular(self, q):
         """Returns the sum part of probability"""
@@ -131,12 +141,10 @@ class Simulator:
             mg = me - q
             if not -self.jg <= mg <= self.jg:
                 continue
-            cg_mod2 = abs(cg(1, q, self.jg, mg, self.je, me))**2
-            state_mod2 = 0
-            for ip, _ in enumerate(range(-self.max_momentum, self.max_momentum + 1)):
-                state_mod2 += abs(self.state[ip*self.spin_states +
-                                  self.ground_states_offset + ie])**2
-            ret += cg_mod2 * state_mod2
+
+            ret += cg_modulus2(1, q, self.jg, mg, self.je, me) * np.sum(
+                abs2(self.state[self.ground_states_offset + ie::self.spin_states]))
+
         return ret
 
     def jump(self, time_step):
@@ -149,17 +157,15 @@ class Simulator:
             for state 9, no jump is made 
         """
         
-        return Simulator._jump(self.calc_probability() * time_step)
-
-    @staticmethod
-    def _jump(probs):
         cur = 0.
         u = np.random.random()
-        for i, p in enumerate(probs):
+        for i, p in enumerate(self.calc_probability() * time_step):
             cur += p
             if cur > u:
                 return i
         return 9
+
+
 
     def simulate(self, tot_steps, time_step, stat_funcs=None, every_n_save=100):
         """The MCWF simulator. 
@@ -204,7 +210,7 @@ class Simulator:
         for iq, q in enumerate((-1, 0, 1)):
             es_dagger = np.zeros(
                 (self.spin_states, self.spin_states), dtype=np.complex128)
-            es_dagger[:(2*self.jg+1), (2*self.jg+1)                      :] = np.conjugate(np.transpose(self.es_matrix(q)))
+            es_dagger[:(2*self.jg+1), (2*self.jg+1):] = np.conjugate(np.transpose(self.es_matrix(q)))
             for ik, k in enumerate((-1, 0, 1)):
                 ret.append(
                     self.p_bar[ik, iq] ** .5 * np.kron(

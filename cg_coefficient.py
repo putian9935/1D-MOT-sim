@@ -12,7 +12,13 @@ from functools import lru_cache
 
 @lru_cache(maxsize=None)
 def cg(j1, m1, j2, m2, j, m):
+    """CG coefficient"""
     return complex(CG(j1, m1, j2, m2, j, m).doit())
+
+@lru_cache(maxsize=None)
+def cg_modulus2(j1, m1, j2, m2, j, m):
+    """Squared modulus of CG coefficient"""
+    return abs(cg(j1, m1, j2, m2, j, m)) ** 2.
 
 
 def Xi(Jg, Je, Epsilon):
