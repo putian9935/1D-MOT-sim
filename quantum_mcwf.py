@@ -5,6 +5,7 @@ __doc__ = """The MCWF program for simulating 1D MOT.
 import numpy as np
 from cg_coefficient import cg
 from tqdm import tqdm
+import numba as nb
 
 
 class Simulator:
@@ -147,10 +148,18 @@ class Simulator:
             for state 0 - 8, the corresponding jump is made; 
             for state 9, no jump is made 
         """
+        
+        return Simulator._jump(self.calc_probability() * time_step)
 
-        distribution = np.hstack((0, time_step * self.calc_probability()))
-        distribution.cumsum(out=distribution)
-        return np.searchsorted(distribution, np.random.random()) - 1
+    @staticmethod
+    def _jump(probs):
+        cur = 0.
+        u = np.random.random()
+        for i, p in enumerate(probs):
+            cur += p
+            if cur > u:
+                return i
+        return 9
 
     def simulate(self, tot_steps, time_step, stat_funcs=None, every_n_save=100):
         """The MCWF simulator. 
@@ -159,7 +168,7 @@ class Simulator:
         -------
         statistics after each time step 
         """
-        
+
         self.state[-(self.max_momentum//2) * self.spin_states] = 1
         ret = []
         for _ in tqdm(range(tot_steps)):
@@ -195,8 +204,7 @@ class Simulator:
         for iq, q in enumerate((-1, 0, 1)):
             es_dagger = np.zeros(
                 (self.spin_states, self.spin_states), dtype=np.complex128)
-            es_dagger[:(2*self.jg+1), (2*self.jg+1)
-                        :] = np.conjugate(np.transpose(self.es_matrix(q)))
+            es_dagger[:(2*self.jg+1), (2*self.jg+1)                      :] = np.conjugate(np.transpose(self.es_matrix(q)))
             for ik, k in enumerate((-1, 0, 1)):
                 ret.append(
                     self.p_bar[ik, iq] ** .5 * np.kron(
@@ -247,5 +255,3 @@ class Simulator:
         The ground state probability
         """
         return np.sum((np.conjugate(self.state).T * self.state)[::self.spin_states])
-
-
