@@ -8,10 +8,18 @@ from tqdm import tqdm
 import numba as nb
 
 
-@nb.vectorize([nb.float64(nb.complex128)])
+@nb.vectorize(fastmath=True)
 def abs2(x):
-    return x.real**2 + x.imag**2
+    return x.real ** 2 + x.imag ** 2
 
+@nb.jit(fastmath=True)
+def vec_mod2(x):
+    return sum(abs2(x))
+
+
+@nb.jit
+def normalize(x):
+    x /= np.vdot(x, x).real ** .5
 
 class Simulator:
     """Simulator of 1D MOT with MCWF 
@@ -55,6 +63,7 @@ class Simulator:
             [3/5, 4/5, 3/5],
             [1/5, 1/10, 1/5]
         ]).T.flatten()
+        self.probs = np.zeros(9)
 
         self.hamiltonian = self.calc_hamiltonian()
 
@@ -125,25 +134,22 @@ class Simulator:
         ----
         The *k* indices goes first, meaning the first three entries correspond to q=-1
         """
-        
-        ret = np.array(self.p_bar_t_flattened)
-        ret[:3] *= self.calc_probability_angular(-1)
-        ret[3:6] *= self.calc_probability_angular(0)
-        ret[6:] *= self.calc_probability_angular(1)
-        return ret
+
+
+        self.probs[:3] = self.p_bar_t_flattened[:3]  *  self.calc_probability_angular(-1)
+        self.probs[3:6] = self.p_bar_t_flattened[3:6]  *  self.calc_probability_angular(0)
+        self.probs[6:] = self.p_bar_t_flattened[6:]  *  self.calc_probability_angular(1)
+
 
     def calc_probability_angular(self, q):
         """Returns the sum part of probability"""
         ret = 0
-        for ie, me in enumerate(range(-self.je, self.je+1)):
-            mg = me - q
-            if not -self.jg <= mg <= self.jg:
-                continue
-
-            ret += cg_modulus2(1, q, self.jg, mg, self.je, me) * sum(
-                abs2(self.state[self.ground_states_offset + ie::self.spin_states]))
+        for me in range(-min(self.je, self.jg-q), min(self.je, self.jg+q)+1):
+            ret += cg_modulus2(1, q, self.jg, me-q, self.je, me) * vec_mod2(self.state[self.ground_states_offset + me + self.je::self.spin_states])
 
         return ret
+
+
 
     def jump(self, time_step):
         """Determine whether a jump is made and, if yes, and where it is to. 
@@ -157,7 +163,8 @@ class Simulator:
 
         cur = 0.
         u = np.random.random() / time_step
-        for i, p in enumerate(self.calc_probability()):
+        self.calc_probability()
+        for i, p in enumerate(self.probs):
             cur += p
             if cur > u:
                 return i
@@ -182,7 +189,7 @@ class Simulator:
                 self.state = self.c_matrices[jump] @ self.state
 
             # use np.sum if larger dimension
-            self.state /= sum(np.abs(self.state)**2)**.5
+            normalize(self.state)
 
             if not _ % every_n_save:
                 new_entry = [jump]
