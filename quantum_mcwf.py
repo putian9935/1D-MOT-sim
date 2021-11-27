@@ -12,6 +12,7 @@ import numba as nb
 def abs2(x):
     return x.real ** 2 + x.imag ** 2
 
+
 @nb.jit(fastmath=True)
 def vec_mod2(x):
     return sum(abs2(x))
@@ -20,6 +21,7 @@ def vec_mod2(x):
 @nb.jit
 def normalize(x):
     x /= np.vdot(x, x).real ** .5
+
 
 class Simulator:
     """Simulator of 1D MOT with MCWF 
@@ -76,6 +78,12 @@ class Simulator:
         self.p2_mat = np.kron(
             np.diag(list(range(-self.max_momentum, self.max_momentum+1)))**2.,
             np.eye(self.spin_states)
+        )
+
+        self.ranges = tuple(
+            list(
+                range(-min(self.je, self.jg-q), min(self.je, self.jg+q)+1)
+            ) for q in (-1, 0, 1)
         )
 
     def calc_hamiltonian(self):
@@ -135,21 +143,21 @@ class Simulator:
         The *k* indices goes first, meaning the first three entries correspond to q=-1
         """
 
-
-        self.probs[:3] = self.p_bar_t_flattened[:3]  *  self.calc_probability_angular(-1)
-        self.probs[3:6] = self.p_bar_t_flattened[3:6]  *  self.calc_probability_angular(0)
-        self.probs[6:] = self.p_bar_t_flattened[6:]  *  self.calc_probability_angular(1)
-
+        self.probs[:3] = self.p_bar_t_flattened[:3] * \
+            self.calc_probability_angular(-1)
+        self.probs[3:6] = self.p_bar_t_flattened[3:6] * \
+            self.calc_probability_angular(0)
+        self.probs[6:] = self.p_bar_t_flattened[6:] * \
+            self.calc_probability_angular(1)
 
     def calc_probability_angular(self, q):
         """Returns the sum part of probability"""
         ret = 0
-        for me in range(-min(self.je, self.jg-q), min(self.je, self.jg+q)+1):
-            ret += cg_modulus2(1, q, self.jg, me-q, self.je, me) * vec_mod2(self.state[self.ground_states_offset + me + self.je::self.spin_states])
+        for me in self.ranges[q+1]:
+            ret += cg_modulus2(1, q, self.jg, me-q, self.je, me) * vec_mod2(
+                self.state[self.ground_states_offset + me + self.je::self.spin_states])
 
         return ret
-
-
 
     def jump(self, time_step):
         """Determine whether a jump is made and, if yes, and where it is to. 
@@ -215,7 +223,8 @@ class Simulator:
         for iq, q in enumerate((-1, 0, 1)):
             es_dagger = np.zeros(
                 (self.spin_states, self.spin_states), dtype=np.complex128)
-            es_dagger[:(2*self.jg+1), (2*self.jg+1):] = np.conjugate(np.transpose(self.es_matrix(q)))
+            es_dagger[:(2*self.jg+1), (2*self.jg+1)
+                        :] = np.conjugate(np.transpose(self.es_matrix(q)))
             for ik, k in enumerate((-1, 0, 1)):
                 ret.append(
                     self.p_bar[ik, iq] ** .5 * np.kron(
