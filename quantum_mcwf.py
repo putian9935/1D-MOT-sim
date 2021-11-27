@@ -125,10 +125,12 @@ class Simulator:
         ----
         The *k* indices goes first, meaning the first three entries correspond to q=-1
         """
-
-        return self.p_bar_t_flattened[:3] * self.calc_probability_angular(-1) + \
-            self.p_bar_t_flattened[3:6] * self.calc_probability_angular(0) + \
-            self.p_bar_t_flattened[6:] * self.calc_probability_angular(1)
+        
+        ret = np.array(self.p_bar_t_flattened)
+        ret[:3] *= self.calc_probability_angular(-1)
+        ret[3:6] *= self.calc_probability_angular(0)
+        ret[6:] *= self.calc_probability_angular(1)
+        return ret
 
     def calc_probability_angular(self, q):
         """Returns the sum part of probability"""
@@ -180,7 +182,7 @@ class Simulator:
                 self.state = self.c_matrices[jump] @ self.state
 
             # use np.sum if larger dimension
-            self.state /= sum(abs2(self.state))**.5  
+            self.state /= sum(np.abs(self.state)**2)**.5
 
             if not _ % every_n_save:
                 new_entry = [jump]
@@ -206,7 +208,7 @@ class Simulator:
         for iq, q in enumerate((-1, 0, 1)):
             es_dagger = np.zeros(
                 (self.spin_states, self.spin_states), dtype=np.complex128)
-            es_dagger[:(2*self.jg+1), (2*self.jg+1)                      :] = np.conjugate(np.transpose(self.es_matrix(q)))
+            es_dagger[:(2*self.jg+1), (2*self.jg+1):] = np.conjugate(np.transpose(self.es_matrix(q)))
             for ik, k in enumerate((-1, 0, 1)):
                 ret.append(
                     self.p_bar[ik, iq] ** .5 * np.kron(
