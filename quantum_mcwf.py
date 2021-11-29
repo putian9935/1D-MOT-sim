@@ -3,9 +3,11 @@ __doc__ = """The MCWF program for simulating 1D MOT.
 
 
 import numpy as np
+from numpy.lib.arraysetops import isin
 from cg_coefficient import cg, cg_modulus2
 from tqdm import tqdm
 import numba as nb
+from collections.abc import Iterable
 
 
 @nb.vectorize(fastmath=True)
@@ -178,15 +180,30 @@ class Simulator:
                 return i
         return 9
 
-    def simulate(self, tot_steps, time_step, stat_funcs=None, every_n_save=100):
+    def simulate(self, tot_steps, time_step, stat_funcs=None, every_n_save=100, init_state=None, init_params=None):
         """The MCWF simulator. 
+
+        Parameters
+        ----------
+        stat_funcs : a list of functions for statistics
+        init_state : function to initialize state, takes jg, je, and nmax as its first 3 parameters 
+        init_params : other parameters to pass to init_state
 
         Returns 
         -------
         statistics after each time step 
         """
 
-        self.state[-(self.max_momentum//2) * self.spin_states] = 1
+        if isinstance(init_state, type(None)):
+            init_state = Simulator.gaussian_init
+        if isinstance(init_params, type(None)):
+            init_params = ()
+        elif not isinstance(init_params, Iterable):
+            init_params = (init_params,)
+
+        self.state = init_state(
+            self.jg, self.je, self.max_momentum, *init_params)
+
         ts_ham = -1j * time_step * self.hamiltonian
         ret = []
         for _ in tqdm(range(tot_steps)):
@@ -203,7 +220,6 @@ class Simulator:
                 new_entry = [jump]
                 for func in stat_funcs:
                     new_entry.append(func(self))
-
                 ret.append(new_entry)
 
         return np.array(ret, dtype=np.complex128)
@@ -223,8 +239,7 @@ class Simulator:
         for iq, q in enumerate((-1, 0, 1)):
             es_dagger = np.zeros(
                 (self.spin_states, self.spin_states), dtype=np.complex128)
-            es_dagger[:(2*self.jg+1), (2*self.jg+1)
-                        :] = np.conjugate(np.transpose(self.es_matrix(q)))
+            es_dagger[:(2*self.jg+1), (2*self.jg+1)                      :] = np.conjugate(np.transpose(self.es_matrix(q)))
             for ik, k in enumerate((-1, 0, 1)):
                 ret.append(
                     self.p_bar[ik, iq] ** .5 * np.kron(
@@ -275,3 +290,23 @@ class Simulator:
         The ground state probability
         """
         return np.sum((np.conjugate(self.state).T * self.state)[::self.spin_states])
+
+    @staticmethod
+    def gaussian_init(je, jg, nmax):
+        """Generate a gaussian wavepacket
+        """
+        ret = np.zeros(2*(je+jg+1)*(2*nmax+1), dtype=np.complex128)
+        sigma = nmax / 4.
+        ret[1::2*(je+jg+1)] = np.exp(-np.arange(-nmax, nmax+1)**2/2/sigma**2)
+        normalize(ret)
+        return ret
+
+    @staticmethod
+    def plane_wave_init(je, jg, nmax, init_p=None):
+        """Generate a plane wave state
+        """
+        if isinstance(init_p, type(None)):
+            init_p = nmax // 2
+        ret = np.zeros(2*(je+jg+1)*(2*nmax+1), dtype=np.complex128)
+        ret[-init_p * 2*(je+jg+1)] = 1.
+        return ret 
