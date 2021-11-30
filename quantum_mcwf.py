@@ -180,7 +180,7 @@ class Simulator:
                 return i
         return 9
 
-    def simulate(self, tot_steps, time_step, stat_funcs=None, every_n_save=100, init_state=None, init_params=None):
+    def simulate(self, tot_steps, time_step, stat_funcs=None, every_n_save=100, init_state=None, init_params=None, pbar=True):
         """The MCWF simulator. 
 
         Parameters
@@ -200,13 +200,18 @@ class Simulator:
             init_params = ()
         elif not isinstance(init_params, Iterable):
             init_params = (init_params,)
-
         self.state = init_state(
             self.jg, self.je, self.max_momentum, *init_params)
 
+        if pbar:
+            steps = tqdm(range(tot_steps))
+        else:
+            steps = range(tot_steps)
+
         ts_ham = -1j * time_step * self.hamiltonian
         ret = []
-        for _ in tqdm(range(tot_steps)):
+        
+        for _ in steps:
             jump = self.jump(time_step)
             if jump == 9:  # no jump
                 self.state += ts_ham @ self.state
@@ -239,7 +244,7 @@ class Simulator:
         for iq, q in enumerate((-1, 0, 1)):
             es_dagger = np.zeros(
                 (self.spin_states, self.spin_states), dtype=np.complex128)
-            es_dagger[:(2*self.jg+1), (2*self.jg+1)                      :] = np.conjugate(np.transpose(self.es_matrix(q)))
+            es_dagger[:(2*self.jg+1), (2*self.jg+1):] = np.conjugate(np.transpose(self.es_matrix(q)))
             for ik, k in enumerate((-1, 0, 1)):
                 ret.append(
                     self.p_bar[ik, iq] ** .5 * np.kron(
@@ -296,8 +301,10 @@ class Simulator:
         """Generate a gaussian wavepacket
         """
         ret = np.zeros(2*(je+jg+1)*(2*nmax+1), dtype=np.complex128)
-        sigma = nmax / 4.
-        ret[1::2*(je+jg+1)] = np.exp(-np.arange(-nmax, nmax+1)**2/2/sigma**2)
+        sigma = nmax / 2.
+        center = 0
+        ret[1::2*(je+jg+1)] = np.exp(-(np.arange(-nmax, nmax+1)-center)
+                                     ** 2/2/sigma**2)
         normalize(ret)
         return ret
 
@@ -309,4 +316,4 @@ class Simulator:
             init_p = nmax // 2
         ret = np.zeros(2*(je+jg+1)*(2*nmax+1), dtype=np.complex128)
         ret[-init_p * 2*(je+jg+1)] = 1.
-        return ret 
+        return ret
