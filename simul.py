@@ -5,7 +5,7 @@ import numpy as np
 
 
 def worker(i, j):
-    return simulators[j][i % pool_size].simulate(400000, 5e-4, [Simulator.momentum, Simulator.momentum2])
+    return simulators[j][i % pool_size].simulate(400000, 5e-4, [Simulator.momentum, Simulator.momentum2], pbar=False)
 
 
 pool_size = 4
