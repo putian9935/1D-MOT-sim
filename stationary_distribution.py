@@ -40,18 +40,7 @@ class Solver:
         self.n_u = self.simpson_coeff * self.n_u
         
         self.m = self._calc_mat()
-        print(np.sum(self.m[::9]+self.m[1::9]+self.m[2::9]))
-        print(self.m.shape)
-
-        w, v= np.linalg.eig(self.m)
-        largest = v[:, np.argmax(w.real)].real.reshape(self.momentum_states, 9)[:,0]
-        # plt.plot(w.real, w.imag, "+")
-        # plt.show()
         
-        for i in reversed(np.argsort(w.real)[-10:]):
-            plt.plot(v[:,i].real.reshape(self.momentum_states, 9)[:,0])
-        plt.show()
-       #  print(np.linalg.eigvals(self.m).real)
 
     def _calc_n_u(self):
         """Pre-calculate N(u) in the range of [-1,1]"""
@@ -100,22 +89,26 @@ class Solver:
         part_ia = np.zeros((self.momentum_states, self.momentum_states))
         part_ib = np.zeros((self.momentum_states, self.momentum_states))
 
+        tabbed = np.hstack([self.n_u,[0] * (self.momentum_states - len(self.n_u))])
         for i in range(-self.max_momentum, self.max_momentum):
             for j in range(self.momentum_per_recoil):
+                part_ia[idx,:] = np.roll(tabbed,-len(self.n_u)+idx+1)
                 # 1.a \pi_+(u-1)
-                left = max(0, idx - self.momentum_per_recoil * 2)
-                right = idx + 1
-                if right > (left ):
-                    part_ia[idx, left:right] = self.n_u[-(right-left):]
+                # left = max(0, idx - self.momentum_per_recoil * 2)
+                # right = idx + 1
+                # if right > (left ):
+                #     part_ia[idx, left:right] = self.n_u[-(right-left):]
 
+                part_ib[idx,:] = np.roll(tabbed,idx-1)
                 # 1.b \pi_-(u+1)
-                left = idx
-                right = min(self.momentum_states, idx +
-                            self.momentum_per_recoil * 2)
-                if right > (left ):
-                    part_ib[idx, left:right] = self.n_u[:(right-left)]
+                # left = idx
+                # right = min(self.momentum_states, idx +
+                #             self.momentum_per_recoil * 2)
+                # if right > (left ):
+                #     part_ib[idx, left:right] = self.n_u[:(right-left)]
 
                 idx += 1
+
 
 
         buf = np.zeros((9, 9))
@@ -191,16 +184,27 @@ class Solver:
         new_row[1::9] = 1
         new_row[2::9] = 1
 
-        append_mat = np.vstack([self.m, new_row])
-        y = np.zeros(self.momentum_states * 9+1)
-        y[-1] = 1
-        # ans = np.linalg.solve(self.m, y).reshape(self.momentum_states,9)
-        ans = (np.linalg.pinv(append_mat) @ y).reshape(self.momentum_states, 9)
+        y = np.zeros(self.momentum_states * 9)
+        y[0] = 1
+        self.m[0]  = new_row
+        ans = np.linalg.solve(self.m, y).reshape(self.momentum_states,9)
+        
+        # append_mat = np.vstack([self.m, new_row])
+        # ans = (np.linalg.pinv(append_mat) @ y).reshape(self.momentum_states, 9)
         plt.plot(ans[:, 0])
         plt.plot(ans[:, 1])
         plt.plot(ans[:, 2])
         plt.show()
 
-
+    def eig_play(self):
+        w, v= np.linalg.eig(self.m)
+        largest = v[:, np.argmax(w.real)].real.reshape(self.momentum_states, 9)[:,0]
+        # plt.plot(w.real, w.imag, "+")
+        # plt.show()
+        
+        for i in reversed(np.argsort(w.real)[-10:]):
+            plt.plot(v[:,i].real.reshape(self.momentum_states, 9)[:,0])
+        plt.show()
+        
 np.set_printoptions(linewidth=120)
-Solver(2, -1.5, nmax=(10, 10), r=float("inf")).solve_distribution()
+Solver(2, 0, nmax=(20, 5), r=float("inf")).solve_distribution()
