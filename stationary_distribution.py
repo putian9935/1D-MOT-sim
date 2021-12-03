@@ -5,7 +5,7 @@ The full master equation will be solved (in a subspace of diagonal momentums) an
 
 import numpy as np
 from functools import lru_cache
-
+from tqdm import tqdm
 
 import matplotlib.pyplot as plt
 
@@ -34,13 +34,14 @@ class Solver:
         self.momentum_per_recoil = nmax[1]
         self.momentum_states = (2*self.max_momentum) * \
             self.momentum_per_recoil
+
+        self.momentums = np.arange(-self.momentum_per_recoil*self.max_momentum,
+                                   self.momentum_per_recoil*self.max_momentum) / self.momentum_per_recoil
+
         self.n_u = self._calc_n_u()
-        
         self.simpson_coeff = self._calc_simpson_coeff(len(self.n_u))
         self.n_u = self.simpson_coeff * self.n_u
-        
         self.m = self._calc_mat()
-        
 
     def _calc_n_u(self):
         """Pre-calculate N(u) in the range of [-1,1]"""
@@ -69,6 +70,17 @@ class Solver:
             return tuple([1/3] + [4/3, 2/3]*((length-3)//2) + [4/3, 1/3])
         return tuple([1/3] + [4/3, 2/3]*((length-6)//2) + [4/3, 1/3+3/8, 9/8, 9/8, 3/8])
 
+    @staticmethod
+    def _calc_trapz_coeff(length):
+        """The trapzoid rule. 
+
+        Parameter: 
+        ----------
+        - length : the number of sampled points
+        """
+
+        return ([.5]+[1]*(length-2)+[.5])
+
     def _calc_mat(self):
         r"""
         Calculate the matrix of evolution. 
@@ -85,40 +97,25 @@ class Solver:
         The structure of the full matrix is similar to the result np.kron(operators, momentum), i.e.
         it can be regarded as a 9x9 block matrix. 
         """
-        idx = 0
+        
         part_ia = np.zeros((self.momentum_states, self.momentum_states))
         part_ib = np.zeros((self.momentum_states, self.momentum_states))
 
-        tabbed = np.hstack([self.n_u,[0] * (self.momentum_states - len(self.n_u))])
-        for i in range(-self.max_momentum, self.max_momentum):
-            for j in range(self.momentum_per_recoil):
-                part_ia[idx,:] = np.roll(tabbed,-len(self.n_u)+idx+1)
-                # 1.a \pi_+(u-1)
-                # left = max(0, idx - self.momentum_per_recoil * 2)
-                # right = idx + 1
-                # if right > (left ):
-                #     part_ia[idx, left:right] = self.n_u[-(right-left):]
-
-                part_ib[idx,:] = np.roll(tabbed,idx-1)
-                # 1.b \pi_-(u+1)
-                # left = idx
-                # right = min(self.momentum_states, idx +
-                #             self.momentum_per_recoil * 2)
-                # if right > (left ):
-                #     part_ib[idx, left:right] = self.n_u[:(right-left)]
-
-                idx += 1
-
-
+        tabbed = np.hstack(
+            [self.n_u, [0] * (self.momentum_states - len(self.n_u))])
+        for idx in range(len(self.momentums)):
+            part_ia[idx, :] = np.roll(tabbed, -len(self.n_u)+idx+1)
+            part_ib[idx, :] = np.roll(tabbed, idx)
+            
 
         buf = np.zeros((9, 9))
 
         buf[0, 1] = 1.
-        part_i = np.kron(part_ia, buf)
+        part_i = np.kron(part_ib, buf)
         buf[0, 1] = 0.
 
         buf[0, 2] = 1.
-        part_i += np.kron(part_ib, buf)
+        part_i += np.kron(part_ia, buf)
 
         part_i /= self.momentum_per_recoil
 
@@ -126,23 +123,24 @@ class Solver:
 
         part_ii = np.diag([1]*(self.momentum_states-1), 1) - \
             np.diag([1]*(self.momentum_states-1), -1)
-        part_ii = np.kron(part_ii, np.eye(9)) / (2. * self.r)
+        part_ii[0, -1] = -1
+        part_ii[-1, 0] = 1
+        
+        part_ii = np.kron(part_ii, np.eye(9)) / \
+            (2. * self.r) * self.momentum_per_recoil
 
         #####
 
         part_iii = np.zeros((9, 9))
-        part_iii[3, 4] = - 2.
-        part_iii[4, 3] = + 2.
-        part_iii[5, 6] = - 2.
-        part_iii[6, 5] = + 2.
+        part_iii[3, 4] = part_iii[6, 5] = + 2.
+        part_iii[4, 3] = part_iii[5, 6] = - 2.
         part_iii[7, 8] = + 4.
         part_iii[8, 7] = - 4.
         part_iii /= self.gamma
 
         part_iii = np.kron(
             np.diag(
-                np.arange(-self.momentum_per_recoil*self.max_momentum,
-                          self.momentum_per_recoil*self.max_momentum) / self.momentum_per_recoil
+                self.momentums
             ),
             part_iii
         )
@@ -158,7 +156,7 @@ class Solver:
 
         part_iv[3, 3] = part_iv[4, 4] = part_iv[5, 5] = part_iv[6, 6] = -.5
         a = self.delta - 1/self.gamma
-        part_iv[3, 4] = part_iv[5, 6] = a
+        part_iv[3, 4] = part_iv[5, 6] = +a
         part_iv[4, 3] = part_iv[6, 5] = -a
 
         part_iv[3, 8] = -self.s / 2 ** 1.5
@@ -177,34 +175,75 @@ class Solver:
 
         return part_i + part_ii + part_iii + part_iv
 
-    def solve_distribution(self):
-        
-        new_row = np.zeros(9 * self.momentum_states)
-        new_row[::9] = 1
-        new_row[1::9] = 1
-        new_row[2::9] = 1
+    def evolve(self, tot_steps, time_step):
+        """Integrate the equation of motion 
+        """
+
+        self.state = np.zeros(self.momentum_states * 9)
+        self.state[1::9] = np.exp(-(np.arange(-self.momentum_per_recoil*self.max_momentum,
+                                              self.momentum_per_recoil*self.max_momentum) / self.momentum_per_recoil/.2)**2)
+        self.state[1::9] /= np.sum(self.state[1::9])
+
+        step_mat = time_step * self.m
+        for _ in tqdm(range(tot_steps)):
+            self.state += step_mat @ self.state
+
+        plt.plot(self.momentums, self.state[::9])
+        plt.plot(self.momentums, self.state[1::9])
+        plt.plot(self.momentums, self.state[2::9])
+        plt.plot(self.momentums, self.get_momentum_distribution(self.state.reshape(-1,9)))
+        plt.show()
+
+    def get_momentum_distribution(self, full_distribution):
+        r"""Solve for momentum distribution 
+
+        Parameter:
+        ----------
+        - full_distribution : a (momentum_states \times 9) matrix; 
+        """
+
+        ret = np.array(full_distribution[:, 0])
+        ret[self.momentum_per_recoil:] += full_distribution[:-self.momentum_per_recoil, 1]
+        ret[:-self.momentum_per_recoil] += full_distribution[self.momentum_per_recoil:, 2]
+        return ret 
+
+    def solve_full_distribution(self):
+        first_row = np.array(self.m[0])
+        self.m[0] = 0. 
+        self.m[0, ::9] = 1
+        self.m[0, 1::9] = 1
+        self.m[0, 2::9] = 1
 
         y = np.zeros(self.momentum_states * 9)
         y[0] = 1
-        self.m[0]  = new_row
-        ans = np.linalg.solve(self.m, y).reshape(self.momentum_states,9)
         
-        # append_mat = np.vstack([self.m, new_row])
-        # ans = (np.linalg.pinv(append_mat) @ y).reshape(self.momentum_states, 9)
-        plt.plot(ans[:, 0])
-        plt.plot(ans[:, 1])
-        plt.plot(ans[:, 2])
-        plt.show()
+        ret = np.linalg.solve(self.m, y).reshape(-1, 9)
+        
+        self.m[0] = first_row
+        
+        return ret 
 
-    def eig_play(self):
-        w, v= np.linalg.eig(self.m)
-        largest = v[:, np.argmax(w.real)].real.reshape(self.momentum_states, 9)[:,0]
-        # plt.plot(w.real, w.imag, "+")
-        # plt.show()
+    def eig_show(self):
+        """Plot the eigen-functions corresponding the 10 largest eigenvalues 
+        """
+
+        w, v = np.linalg.eig(self.m)
         
         for i in reversed(np.argsort(w.real)[-10:]):
-            plt.plot(v[:,i].real.reshape(self.momentum_states, 9)[:,0])
+            plt.plot(self.momentums, v[:, i].real.reshape(-1, 9)[:, 0], label='%.3e'%w[i].real)
+        plt.legend()
         plt.show()
-        
-np.set_printoptions(linewidth=120)
-Solver(2, 0, nmax=(20, 5), r=float("inf")).solve_distribution()
+
+
+np.set_printoptions(linewidth=120, precision=2)
+# sol = Solver(2, -2.5, nmax=(5, 10), gamma=10).eig_show()
+sol = Solver(2, -2.5, nmax=(10, 20), gamma=1.6)
+# sol.evolve(100000, .0001)
+plt.plot(sol.momentums, sol.get_momentum_distribution(sol.solve_full_distribution()))
+
+sol = Solver(1, -2.5, nmax=(10, 30), gamma=1, r=float("inf"))
+# sol.evolve(100000, .0001)
+plt.plot(sol.momentums, sol.get_momentum_distribution(sol.solve_full_distribution()))
+
+plt.axhline(0)
+plt.show()
