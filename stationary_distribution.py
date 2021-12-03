@@ -81,7 +81,6 @@ class Solver:
 
         return ([.5]+[1]*(length-2)+[.5])
 
-    
     def _calc_mat(self):
         r"""
         Calculate the matrix of evolution. 
@@ -98,9 +97,9 @@ class Solver:
         The structure of the full matrix is similar to the result np.kron(operators, momentum), i.e.
         it can be regarded as a 9x9 block matrix. 
         """
-        
+
         def _kron(a, b):
-            return (a[:, None, :, None]*b[None, :, None, :]).reshape(9*self.momentum_states,9*self.momentum_states)
+            return (a[:, None, :, None]*b[None, :, None, :]).reshape(9*self.momentum_states, 9*self.momentum_states)
 
         part_ia = np.zeros((self.momentum_states, self.momentum_states))
         part_ib = np.zeros((self.momentum_states, self.momentum_states))
@@ -110,7 +109,6 @@ class Solver:
         for idx in range(len(self.momentums)):
             part_ia[idx, :] = np.roll(tabbed, -len(self.n_u)+idx+1)
             part_ib[idx, :] = np.roll(tabbed, idx)
-            
 
         buf = np.zeros((9, 9))
 
@@ -129,7 +127,7 @@ class Solver:
             np.diag([1]*(self.momentum_states-1), -1)
         part_ii[0, -1] = -1
         part_ii[-1, 0] = 1
-        
+
         part_ii = _kron(part_ii, np.eye(9)) / \
             (2. * self.r) * self.momentum_per_recoil
 
@@ -195,7 +193,8 @@ class Solver:
         plt.plot(self.momentums, self.state[::9])
         plt.plot(self.momentums, self.state[1::9])
         plt.plot(self.momentums, self.state[2::9])
-        plt.plot(self.momentums, self.get_momentum_distribution(self.state.reshape(-1,9)))
+        plt.plot(self.momentums, self.get_momentum_distribution(
+            self.state.reshape(-1, 9)))
         plt.show()
 
     def get_momentum_distribution(self, full_distribution):
@@ -209,32 +208,31 @@ class Solver:
         ret = np.array(full_distribution[:, 0])
         ret[self.momentum_per_recoil:] += full_distribution[:-self.momentum_per_recoil, 1]
         ret[:-self.momentum_per_recoil] += full_distribution[self.momentum_per_recoil:, 2]
-        return ret 
+        return ret
 
     def solve_full_distribution(self):
         first_row = np.array(self.m[0])
-        self.m[0] = 0. 
+        self.m[0] = 0.
         self.m[0, ::9] = 1
         self.m[0, 1::9] = 1
         self.m[0, 2::9] = 1
 
         y = np.zeros(self.momentum_states * 9)
         y[0] = 1
-        
         ret = np.linalg.solve(self.m, y).reshape(-1, 9)
-        
+
         self.m[0] = first_row
-        
-        return ret 
+
+        return ret
 
     def eig_show(self):
         """Plot the eigen-functions corresponding the 10 largest eigenvalues 
         """
 
         w, v = np.linalg.eig(self.m)
-        
         for i in reversed(np.argsort(w.real)[-10:]):
-            plt.plot(self.momentums, v[:, i].real.reshape(-1, 9)[:, 0], label='%.3e'%w[i].real)
+            plt.plot(
+                self.momentums, v[:, i].real.reshape(-1, 9)[:, 0], label='%.3e' % w[i].real)
         plt.legend()
         plt.show()
 
@@ -242,13 +240,15 @@ class Solver:
 if __name__ == "__main__":
     np.set_printoptions(linewidth=120, precision=2)
     # sol = Solver(2, -2.5, nmax=(5, 10), gamma=10).eig_show()
-    sol = Solver(2, -2.5, nmax=(10, 20), gamma=1.6,r=float("inf"))
+    sol = Solver(2, -2.5, nmax=(10, 20), gamma=1.6, r=float("inf"))
     # sol.evolve(100000, .0001)
-    plt.plot(sol.momentums, sol.get_momentum_distribution(sol.solve_full_distribution()))
+    plt.plot(sol.momentums, sol.get_momentum_distribution(
+        sol.solve_full_distribution()))
     plt.show()
     sol = Solver(1, -2.5, nmax=(10, 30), gamma=1, r=float("inf"))
     # sol.evolve(100000, .0001)
-    plt.plot(sol.momentums, sol.get_momentum_distribution(sol.solve_full_distribution()))
+    plt.plot(sol.momentums, sol.get_momentum_distribution(
+        sol.solve_full_distribution()))
 
     plt.axhline(0)
     plt.show()
