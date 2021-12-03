@@ -81,6 +81,7 @@ class Solver:
 
         return ([.5]+[1]*(length-2)+[.5])
 
+    
     def _calc_mat(self):
         r"""
         Calculate the matrix of evolution. 
@@ -98,6 +99,9 @@ class Solver:
         it can be regarded as a 9x9 block matrix. 
         """
         
+        def _kron(a, b):
+            return (a[:, None, :, None]*b[None, :, None, :]).reshape(9*self.momentum_states,9*self.momentum_states)
+
         part_ia = np.zeros((self.momentum_states, self.momentum_states))
         part_ib = np.zeros((self.momentum_states, self.momentum_states))
 
@@ -111,11 +115,11 @@ class Solver:
         buf = np.zeros((9, 9))
 
         buf[0, 1] = 1.
-        part_i = np.kron(part_ib, buf)
+        part_i = _kron(part_ia, buf)
         buf[0, 1] = 0.
 
         buf[0, 2] = 1.
-        part_i += np.kron(part_ia, buf)
+        part_i += _kron(part_ib, buf)
 
         part_i /= self.momentum_per_recoil
 
@@ -126,19 +130,19 @@ class Solver:
         part_ii[0, -1] = -1
         part_ii[-1, 0] = 1
         
-        part_ii = np.kron(part_ii, np.eye(9)) / \
+        part_ii = _kron(part_ii, np.eye(9)) / \
             (2. * self.r) * self.momentum_per_recoil
 
         #####
 
         part_iii = np.zeros((9, 9))
-        part_iii[3, 4] = part_iii[6, 5] = + 2.
-        part_iii[4, 3] = part_iii[5, 6] = - 2.
+        part_iii[3, 4] = part_iii[6, 5] = - 2.
+        part_iii[4, 3] = part_iii[5, 6] = + 2.
         part_iii[7, 8] = + 4.
         part_iii[8, 7] = - 4.
         part_iii /= self.gamma
 
-        part_iii = np.kron(
+        part_iii = _kron(
             np.diag(
                 self.momentums
             ),
@@ -171,7 +175,7 @@ class Solver:
         part_iv[7, 4] = part_iv[7, 6] = part_iv[8, 3] = self.s / 2 ** 1.5
         part_iv[8, 5] = -self.s / 2 ** 1.5
 
-        part_iv = np.kron(np.eye(self.momentum_states), part_iv)
+        part_iv = _kron(np.eye(self.momentum_states), part_iv)
 
         return part_i + part_ii + part_iii + part_iv
 
@@ -235,15 +239,16 @@ class Solver:
         plt.show()
 
 
-np.set_printoptions(linewidth=120, precision=2)
-# sol = Solver(2, -2.5, nmax=(5, 10), gamma=10).eig_show()
-sol = Solver(2, -2.5, nmax=(10, 20), gamma=1.6)
-# sol.evolve(100000, .0001)
-plt.plot(sol.momentums, sol.get_momentum_distribution(sol.solve_full_distribution()))
+if __name__ == "__main__":
+    np.set_printoptions(linewidth=120, precision=2)
+    # sol = Solver(2, -2.5, nmax=(5, 10), gamma=10).eig_show()
+    sol = Solver(2, -2.5, nmax=(10, 20), gamma=1.6,r=float("inf"))
+    # sol.evolve(100000, .0001)
+    plt.plot(sol.momentums, sol.get_momentum_distribution(sol.solve_full_distribution()))
+    plt.show()
+    sol = Solver(1, -2.5, nmax=(10, 30), gamma=1, r=float("inf"))
+    # sol.evolve(100000, .0001)
+    plt.plot(sol.momentums, sol.get_momentum_distribution(sol.solve_full_distribution()))
 
-sol = Solver(1, -2.5, nmax=(10, 30), gamma=1, r=float("inf"))
-# sol.evolve(100000, .0001)
-plt.plot(sol.momentums, sol.get_momentum_distribution(sol.solve_full_distribution()))
-
-plt.axhline(0)
-plt.show()
+    plt.axhline(0)
+    plt.show()
